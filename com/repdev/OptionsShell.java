@@ -7,6 +7,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.IllegalArgumentException;
+import java.util.regex.*;
 
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.SelectionAdapter;
@@ -24,6 +25,7 @@ import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.List;
+import org.eclipse.swt.widgets.MessageBox;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Spinner;
 import org.eclipse.swt.widgets.TabFolder;
@@ -50,10 +52,11 @@ public class OptionsShell {
 	// Controls
 	private Spinner tabSpinner;
 	private Combo styleCombo, hour, minute;
-	private Label varsLabel, serverLabel, portLabel, errChkPrefixLabel, errChkSuffixLabel, nameInTitleLabel, hostInTitleLabel;
-	private Text  serverText, portText, errCheckPrefix, errCheckSuffix;
-	private Button varsButton, neverTerm, devForgetBox, backupEnable, fileNameInTitle, hostInTitle;
-	
+	private Label varsLabel, serverLabel, portLabel, useSSOLabel, errChkPrefixLabel, errChkSuffixLabel, nameInTitleLabel, hostInTitleLabel, viewLineNumbersLabel, liveSYMLabel, liveSYMColorLabel, useSourceControlLabel, sourceControlDirLabel;
+	private Text  serverText, portText, errCheckPrefix, errCheckSuffix, liveSYMText, liveSYMColorText, sourceControlDir;
+	private Button varsButton, neverTerm, useSSO, devForgetBox, backupEnable, fileNameInTitle, hostInTitle, viewLineNumbers, useSourceControl;
+	private String ssoPass = "";
+
 	public static void show(Shell parent) {
 		me.create(parent);		
 		me.shell.open();
@@ -100,6 +103,14 @@ public class OptionsShell {
 				Config.setNoErrorCheckSuffix(errCheckSuffix.getText());
 				Config.setFileNameInTitle(fileNameInTitle.getSelection());
 				Config.setHostNameInTitle(hostInTitle.getSelection());
+				Config.setViewLineNumbers(viewLineNumbers.getSelection());
+				Config.setLiveSym(Integer.parseInt(liveSYMText.getText()));
+				Config.setLiveSymColor(liveSYMColorText.getText());
+				Config.setUseSourceControl(useSourceControl.getSelection());
+				Config.setSourceControlDir(sourceControlDir.getText());
+				if (!ssoPass.contentEquals("")) {
+					Config.setPasswordValidator(ssoPass);
+				}
 
 				/*if (testRadio.getSelection())
 					Config.setServer("test");
@@ -120,8 +131,12 @@ public class OptionsShell {
 
 				if( RepDevMain.DEVELOPER )
 					Config.setBackupProjectFile( backupEnable.getSelection() );				
-				
-				shell.close();
+
+				if(validateData("[a-fA-F0-9]{6}", liveSYMColorText.getText(), "Incorrect value entered for the Live SYM background color. Please specify 6 hexadecimal only.  Example FFD7E4")) {
+					shell.close();
+				} else {
+					Config.setLiveSymColor("FFD7E4");
+				}
 			}
 		});
 		
@@ -182,6 +197,54 @@ public class OptionsShell {
 		
 		portText = new Text(serverGroup, SWT.SINGLE | SWT.BORDER);
 		portText.setText(""+Config.getPort());
+		
+		useSSOLabel = new Label(serverGroup, SWT.NONE);
+		useSSOLabel.setText("Use Single Sign-On");
+		
+		useSSO = new Button(serverGroup, SWT.CHECK);
+		useSSO.setSelection(Config.useSSO());
+		useSSO.addSelectionListener(new SelectionAdapter() {
+			public void widgetSelected(SelectionEvent e) {
+				if(useSSO.getSelection()){
+					// SET MASTER PASSWROD
+					String password = RepDev_SSO.getRepDevPassword(shell);
+					if (password.contentEquals("")) {
+						useSSO.setSelection(false);
+						ssoPass = "";
+					} else {
+						ssoPass = password;
+						RepDevMain.MASTER_PASSWORD_HASH = RepDev_SSO.md5Hash(ssoPass);
+						Config.setPasswordValidator(ssoPass);
+						//MessageBox dialog = new MessageBox(shell, SWT.OK | SWT.ICON_INFORMATION);
+						//dialog.setText("Settings");
+						//dialog.setMessage("Please click \"Save Settings\".  Exit and relaunch RepDev to log in.");
+						//dialog.open();
+					}
+				}
+				else{
+					// REMOVE MASTER PASSWORD AND CLEAR SYM PASSWORDS
+					MessageBox dialog = new MessageBox(shell, SWT.OK | SWT.CANCEL | SWT.ICON_WARNING);
+					dialog.setText("Single Sign-On");
+					dialog.setMessage("All of the cached passwords will be deleted IMMEDIATELY ! ! !");
+					int selection = dialog.open();
+					
+					if (selection == SWT.OK) {
+						System.out.println("ALL Passwords deleted");
+						
+						for (int sym : RepDevMain.SESSION_INFO.keySet()) {
+							RepDevMain.SESSION_INFO.get(sym).clearCredential();
+						}
+						
+						ssoPass = "";
+						Config.setPasswordValidator("");
+						RepDevMain.MASTER_PASSWORD_HASH = null;
+					} else {
+						System.out.println("ALL Passwords delete cancelled");
+						useSSO.setSelection(true);
+					}
+				}
+			}
+		});
 		
 		Group keepAliveGroup = new Group(serverOptions,SWT.NONE);
 		keepAliveGroup.setText("Keep Alive Options (Log out Sym Required)");
@@ -274,6 +337,18 @@ public class OptionsShell {
 		data.width = 140;
 		portText.setLayoutData(data);
 		
+		data = new FormData();
+		data.left = new FormAttachment(0);
+		data.top = new FormAttachment(portLabel);
+		data.width = 140;
+		useSSOLabel.setLayoutData(data);
+		
+		data = new FormData();
+		data.left = new FormAttachment(useSSOLabel);
+		data.top = new FormAttachment(portLabel);
+		data.height = 25;
+		useSSO.setLayoutData(data);
+		
 		// align controls for the keepalive group:
 		data = new FormData();
 		data.left = new FormAttachment(0);
@@ -351,6 +426,45 @@ public class OptionsShell {
 		if( Config.getStyle() != null ) 
 		    styleCombo.setText(Config.getStyle());
 		
+		liveSYMLabel = new Label(editorGroup, SWT.NONE);
+		liveSYMLabel.setText("Live SYM Number");
+
+		liveSYMText = new Text(editorGroup, SWT.SINGLE | SWT.BORDER);
+		try{
+			liveSYMText.setText(Integer.toString(Config.getLiveSym()));
+		} catch (IllegalArgumentException e) {
+			liveSYMText.setText("1999");
+		}
+		liveSYMColorLabel = new Label(editorGroup, SWT.NONE);
+		liveSYMColorLabel.setText("Live SYM background Color");
+
+		liveSYMColorText = new Text(editorGroup, SWT.SINGLE | SWT.BORDER);
+		try{
+			liveSYMColorText.setText(Config.getLiveSymColor());
+		} catch (IllegalArgumentException e){
+			liveSYMColorText.setText("FFD7E4");
+			liveSYMText.setText("1999");
+		}
+		
+		useSourceControlLabel = new Label(editorGroup, SWT.NONE);
+		useSourceControlLabel.setText("Use Source Control");
+		
+		useSourceControl = new Button(editorGroup, SWT.CHECK);
+		useSourceControl.setSelection(Config.getUseSourceControl());
+
+		
+		sourceControlDirLabel = new Label(editorGroup, SWT.NONE);
+		sourceControlDirLabel.setText("Repository Dir");
+
+		sourceControlDir = new Text(editorGroup, SWT.SINGLE | SWT.BORDER);
+		try{
+			sourceControlDir.setText(Config.getSourceControlDir());
+		} catch (IllegalArgumentException e){
+			sourceControlDir.setText("");
+		}
+
+		
+		
 		varsLabel = new Label(editorGroup, SWT.NONE);
 		varsLabel.setText("List unused variables");
 		
@@ -367,6 +481,11 @@ public class OptionsShell {
 		hostInTitleLabel.setText("Display host name in main title");
 		hostInTitle = new Button(editorGroup, SWT.CHECK);
 		hostInTitle.setSelection((Config.getHostNameInTitle()));
+
+		viewLineNumbersLabel = new Label(editorGroup, SWT.NONE);
+		viewLineNumbersLabel.setText("Display line numbers");
+		viewLineNumbers = new Button(editorGroup, SWT.CHECK);
+		viewLineNumbers.setSelection((Config.getViewLineNumbers()));
 
 		Group noErrorCheckGroup = new Group(editorOptions,SWT.NONE);
 		noErrorCheckGroup.setText("No Error Check for these Files");
@@ -398,6 +517,7 @@ public class OptionsShell {
 			Config.setHostNameInTitle(true);
 			fileNameInTitle.setSelection(true);
 			hostInTitle.setSelection(true);
+			viewLineNumbers.setSelection(true);
 			RepDevMain.saveSettings();
 		}
 		FormData data = new FormData();
@@ -410,7 +530,7 @@ public class OptionsShell {
 		data = new FormData();
 		data.left = new FormAttachment(0);
 		data.top = new FormAttachment(0);
-		data.width = 160;
+		data.width = 163;
 		tabLabel.setLayoutData(data);
 
 		data = new FormData();
@@ -422,7 +542,7 @@ public class OptionsShell {
 		data = new FormData();
 		data.left = new FormAttachment(0);
 		data.top = new FormAttachment(tabSpinner);
-		data.width = 160;
+		data.width = 163;
 		styleLabel.setLayoutData(data);
 		
 		data = new FormData();
@@ -430,23 +550,72 @@ public class OptionsShell {
 		data.top = new FormAttachment(tabSpinner);
 		data.right = new FormAttachment(100);
 		styleCombo.setLayoutData(data);
-		
+
 		data = new FormData();
 		data.left = new FormAttachment(0);
 		data.top = new FormAttachment(styleCombo);
-		data.width = 160;
+		data.width = 163;
+		liveSYMLabel.setLayoutData(data);
+
+		data = new FormData();
+		data.left = new FormAttachment(liveSYMLabel);
+		data.top = new FormAttachment(styleCombo);
+		data.right = new FormAttachment(100);
+		liveSYMText.setLayoutData(data);
+
+		data = new FormData();
+		data.left = new FormAttachment(0);
+		data.top = new FormAttachment(liveSYMText);
+		data.width = 163;
+		liveSYMColorLabel.setLayoutData(data);
+
+		data = new FormData();
+		data.left = new FormAttachment(liveSYMColorLabel);
+		data.top = new FormAttachment(liveSYMText);
+		data.right = new FormAttachment(100);
+		liveSYMColorText.setLayoutData(data);
+
+		data = new FormData();
+		data.left = new FormAttachment(0);
+		data.top = new FormAttachment(liveSYMColorText);
+		data.width = 163;
+		useSourceControlLabel.setLayoutData(data);
+		
+		data = new FormData();
+		data.left = new FormAttachment(useSourceControlLabel);
+		data.top = new FormAttachment(liveSYMColorText);
+		data.right = new FormAttachment(100);
+		useSourceControl.setLayoutData(data);
+
+
+		data = new FormData();
+		data.left = new FormAttachment(0);
+		data.top = new FormAttachment(useSourceControl);
+		data.width = 163;
+		sourceControlDirLabel.setLayoutData(data);
+
+		data = new FormData();
+		data.left = new FormAttachment(sourceControlDirLabel);
+		data.top = new FormAttachment(useSourceControl);
+		data.right = new FormAttachment(100);
+		sourceControlDir.setLayoutData(data);
+
+		data = new FormData();
+		data.left = new FormAttachment(0);
+		data.top = new FormAttachment(sourceControlDir);
+		data.width = 163;
 		varsLabel.setLayoutData(data);
 
 		data = new FormData();
 		data.left = new FormAttachment(varsLabel);
-		data.top = new FormAttachment(styleCombo);
+		data.top = new FormAttachment(sourceControlDir);
 		data.right = new FormAttachment(100);
 		varsButton.setLayoutData(data);
 
 		data = new FormData();
 		data.left = new FormAttachment(0);
 		data.top = new FormAttachment(varsButton);
-		data.width = 160;
+		data.width = 163;
 		nameInTitleLabel.setLayoutData(data);
 
 		data = new FormData();
@@ -458,7 +627,7 @@ public class OptionsShell {
 		data = new FormData();
 		data.left = new FormAttachment(0);
 		data.top = new FormAttachment(fileNameInTitle);
-		data.width = 160;
+		data.width = 163;
 		hostInTitleLabel.setLayoutData(data);
 
 		data = new FormData();
@@ -466,6 +635,18 @@ public class OptionsShell {
 		data.top = new FormAttachment(fileNameInTitle);
 		data.right = new FormAttachment(100);
 		hostInTitle.setLayoutData(data);
+
+		data = new FormData();
+		data.left = new FormAttachment(0);
+		data.top = new FormAttachment(hostInTitle);
+		data.width = 163;
+		viewLineNumbersLabel.setLayoutData(data);
+
+		data = new FormData();
+		data.left = new FormAttachment(viewLineNumbersLabel);
+		data.top = new FormAttachment(hostInTitle);
+		data.right = new FormAttachment(100);
+		viewLineNumbers.setLayoutData(data);
 
 		data = new FormData();
 		data.left = new FormAttachment(0);
@@ -736,4 +917,22 @@ public class OptionsShell {
 		
 	}
 	
+	private boolean validateData(String regExp, String compare, String msg) {
+		boolean isMatch = Pattern.matches(regExp, compare);
+		
+		if(!isMatch){
+			if(msg.length()!=0) {
+				MessageBox dialog = new MessageBox(shell, SWT.ICON_ERROR | SWT.OK);
+				dialog.setMessage(msg);
+				dialog.setText("Input Error");
+				dialog.open();
+			}
+			
+			return false;
+		} else {
+			return true;
+		}
+	}
+	
+
 }

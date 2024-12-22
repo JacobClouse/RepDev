@@ -185,8 +185,6 @@ public class MainShell {
 	private void createShell() {
 		int leftPercent = 20, bottomPercent = 20;
 		shell.setText(RepDevMain.NAMESTR);
-		if(Config.getHostNameInTitle())
-			shell.setText(shell.getText() + " - " + Config.getServer());
 		shell.setImage(RepDevMain.smallProgramIcon);
 		if(Config.getWindowSize() != null)
 			shell.setSize(Config.getWindowSize());
@@ -373,6 +371,7 @@ public class MainShell {
 		findReplaceShell = new FindReplaceShell(shell);
 		shell.setMinimumSize(3 * MIN_COMP_SIZE, 3 * MIN_COMP_SIZE);
 		shell.setMaximized(Config.getWindowMaximized());
+		//TEST InputShell.getInput(shell, "Test Prompt", "This will change all of the saved AIX Password for a server.     \n\nEnter the Server\n\n", "", false);
 	}
 
 	public Object openFile(Sequence seq, int sym) {
@@ -427,6 +426,7 @@ public class MainShell {
 			// Attach find/replace shell here as well (in addition to folder
 			// listener)
 			findReplaceShell.attach(((ReportComposite) editor).getStyledText(), false);
+			setMainTitle();
 
 			return editor;
 		}
@@ -474,15 +474,19 @@ public class MainShell {
 
 			// If anything goes wrong creating the Editor, we want to fail here
 			// It will dispose of the item to indicate this fault.
-			if (item.isDisposed()) {
-				MessageBox dialog = new MessageBox(shell, SWT.ICON_ERROR | SWT.OK);
-				dialog.setMessage("There has been an error loading this file, the filename is probably too long");
-				dialog.setText("Error");
-				dialog.open();
-
+			if (file.isCompareMode()) {
+				file.compareMode(false);
 				return null;
-			}
+			} else {
+				if (item.isDisposed()) {
+					MessageBox dialog = new MessageBox(shell, SWT.ICON_ERROR | SWT.OK);
+					dialog.setMessage("There has been an error loading this file, the filename is probably too long");
+					dialog.setText("Error");
+					dialog.open();
 
+					return null;
+				}
+			}
 			mainfolder.setSelection(item);
 			item.setControl(editor);
 			setMainFolderSelection(item);
@@ -573,14 +577,16 @@ public class MainShell {
 			boolean exists = false;
 
 			for (TreeItem current : tree.getItems()) {
-				if (current.getData() instanceof Integer && ((Integer) current.getData()) == sym)
+				if (current.getData() instanceof Integer && ((Integer) current.getData()) == sym) {
+					current.setImage(RepDevMain.smallSymOnImage);
 					exists = true;
+				}
 			}
 
 			if (!exists) {
 				TreeItem item = new TreeItem(tree, SWT.NONE);
 				item.setText("Sym " + sym);
-				item.setImage(RepDevMain.smallSymImage);
+				item.setImage(RepDevMain.smallSymOnImage);
 				item.setData(sym);
 				new TreeItem(item, SWT.NONE).setText("Loading...");
 			}
@@ -765,6 +771,22 @@ public class MainShell {
 
 		if (files.size() > 0) {
 			SymitarFile file = files.get(0);
+			SourceControl sc = new SourceControl();
+			
+			if(sc.useSourceControl && file.getType() == FileType.REPGEN && !file.isLocal() && file.getSym() != Config.getLiveSym()) {
+				SymitarFile scFile = sc.getSourceControlFile(file);
+				if(!sc.fileExist(scFile)) {
+					MessageBox mdialog = new MessageBox(shell,
+							SWT.ICON_QUESTION | SWT.YES | SWT.NO);
+					mdialog.setText("Source Control");
+					mdialog.setMessage(
+							"The RepGen ("+scFile.getName()+") does not exist in the repository.  Would you like to create a copy and Sync the RepGens?");
+					if (mdialog.open() == SWT.YES) {
+						// Sync the File
+						file.syncRepGen(true);
+					}
+				}
+			}
 
 			TreeItem[] selection = tree.getSelection();
 			if (selection.length != 1)
@@ -1226,7 +1248,9 @@ public class MainShell {
 
 		for (int sym : Config.getSyms()) {
 			TreeItem item = new TreeItem(tree, SWT.NONE);
-			item.setText("Sym " + sym);
+			String symdesc = "";
+			symdesc = (RepDevMain.SESSION_INFO.get(sym).getDescription().length() != 0 ? " - " + RepDevMain.SESSION_INFO.get(sym).getDescription() : "");
+			item.setText("Sym " + sym + symdesc);
 			item.setImage(RepDevMain.smallSymImage);
 			item.setData(sym);
 			new TreeItem(item, SWT.NONE).setText("Loading...");
@@ -1557,6 +1581,17 @@ public class MainShell {
 
 		});
 
+		final MenuItem renameSym = new MenuItem(treeMenu, SWT.NONE);
+		renameSym.setText("SYM Description");
+		renameSym.addSelectionListener(new SelectionAdapter() {
+
+			public void widgetSelected(SelectionEvent e) {
+				if (tree.getSelectionCount() == 1)
+					renameSymDesc(tree.getSelection()[0]);
+			}
+
+		});
+
 		final MenuItem renameFile = new MenuItem(treeMenu, SWT.NONE);
 		renameFile.setText("Rename Item");
 		renameFile.addSelectionListener(new SelectionAdapter() {
@@ -1583,15 +1618,28 @@ public class MainShell {
 
 				if(dialog.open() == SWT.YES){
 					for(TreeItem ti : tree.getSelection()){
-						if(ti.getData() instanceof Project)
-							name = ((Project)ti.getData()).getName();
-						else
-							name = ((SymitarFile)ti.getData()).getName();
+						boolean renamed = false;
+						int iteration = 0;
+						while(!renamed && iteration <= 30) {
+							if(ti.getData() instanceof Project)
+								name = ((Project)ti.getData()).getName();
+							else
+								name = ((SymitarFile)ti.getData()).getName();
 
-						nameLen = (name.length() > 22 ? 23 : name.length());
-						name = name.substring(0, nameLen).concat(date.format(new Date()));
-						System.out.println("NAME: "+name);
-						handleRenameItem(ti, name);
+							if(iteration==0) {
+								nameLen = (name.length() > 23 ? 24 : name.length());
+								name = name.substring(0, nameLen).concat(date.format(new Date()));
+							} else if(iteration >= 1 && iteration <= 9) {
+								nameLen = (name.length() > 22 ? 23 : name.length());
+								name = name.substring(0, nameLen).concat(Integer.toString(iteration)).concat(date.format(new Date()));
+							} else if(iteration >= 10 && iteration <= 30) {
+								nameLen = (name.length() > 21 ? 22 : name.length());
+								name = name.substring(0, nameLen).concat(Integer.toString(iteration)).concat(date.format(new Date()));
+							}
+							System.out.println("NAME: "+name);
+							renamed = handleRenameItem(ti, name);
+							iteration++;
+						}
 					}
 				}
 			}
@@ -1639,6 +1687,33 @@ public class MainShell {
 
 		});
 
+		final MenuItem compareToProduction = new MenuItem(treeMenu, SWT.NONE);
+		compareToProduction.setText("Compare to Production");
+		compareToProduction.setImage(RepDevMain.smallCompareImage);
+		compareToProduction.addSelectionListener(new SelectionAdapter() {
+
+			public void widgetSelected(SelectionEvent e) {
+				SourceControl sc = new SourceControl();
+				sc.compareToProduction((SymitarFile) tree.getSelection()[0].getData());
+			}
+
+		});
+
+		/*
+		final MenuItem copyFromSourceControl = new MenuItem(treeMenu, SWT.NONE);
+		copyFromSourceControl.setText("Copy from the repository");
+		copyFromSourceControl.setImage(RepDevMain.smallCopyImage);
+		copyFromSourceControl.addSelectionListener(new SelectionAdapter() {
+
+			public void widgetSelected(SelectionEvent e) {
+				SymitarFile file = (SymitarFile) tree.getSelection()[0].getData();
+				
+				SourceControl sc = new SourceControl();
+				sc.copyFromSourceControl(file);
+			}
+
+		});
+*/
 		new MenuItem(treeMenu, SWT.SEPARATOR);
 
 		final MenuItem openFile = new MenuItem(treeMenu, SWT.NONE);
@@ -1708,8 +1783,9 @@ public class MainShell {
 					}
 
 					if (RepDevMain.SYMITAR_SESSIONS.get(sym).isConnected()) {
-						ProjectManager.saveProjects(sym);
+						if(((DirectSymitarSession)RepDevMain.SYMITAR_SESSIONS.get(sym)).keepAliveActive()) ProjectManager.saveProjects(sym);
 						RepDevMain.SYMITAR_SESSIONS.get(sym).disconnect();
+						currentItem.setImage(RepDevMain.smallSymImage);
 						currentItem.setExpanded(false);
 						currentItem.removeAll();
 
@@ -1771,6 +1847,8 @@ public class MainShell {
 
 				symLogoff.setEnabled(false);
 				symProp.setEnabled(false);
+				//copyFromSourceControl.setEnabled(false);
+				compareToProduction.setEnabled(false);
 
 				if (tree.getSelectionCount() == 0)
 					return;
@@ -1802,6 +1880,7 @@ public class MainShell {
 					newProject.setEnabled(loggedIn);
 					openFile.setEnabled(loggedIn);
 
+					renameSym.setEnabled(tree.getSelection()[0].getData() instanceof Integer);
 					renameFile.setEnabled(!(tree.getSelection()[0].getData() instanceof String || tree.getSelection()[0].getData() instanceof Integer));
 					symLogoff.setEnabled(loggedIn && tree.getSelection()[0].getData() instanceof Integer);
 					symProp.setEnabled(loggedIn && tree.getSelection()[0].getData() instanceof Integer);
@@ -1827,7 +1906,14 @@ public class MainShell {
 					runMenuItem.setEnabled(true);
 					installFile.setEnabled(true);
 				}
-
+				
+				if (tree.getSelectionCount() == 1 && tree.getSelection()[0].getData() instanceof SymitarFile
+						/*  && !((SymitarFile) tree.getSelection()[0].getData()).isLocal()  */){
+					if (((SymitarFile) tree.getSelection()[0].getData()).getSym() != Config.getLiveSym()) {
+						if (RepDevMain.SYMITAR_SESSIONS.get(Config.getLiveSym())!=null && RepDevMain.SYMITAR_SESSIONS.get(Config.getLiveSym()).isConnected())
+							compareToProduction.setEnabled(true);
+					}
+				}
 			}
 
 		});
@@ -1881,7 +1967,7 @@ public class MainShell {
 								});
 
 								return;
-							}
+							} else { root.setImage(RepDevMain.smallSymOnImage); }
 						}
 					}
 					ArrayList<Project> projects = new ArrayList<Project>();
@@ -2017,30 +2103,50 @@ public class MainShell {
 			openFile(file);
 	}
 
-	private void handleRenameItem(TreeItem item, String newName) {
+	private boolean handleRenameItem(TreeItem item, String newName) {
 		if (item.getData() instanceof SymitarFile) {
 			// Set SymitarFile name
-			if (((SymitarFile) item.getData()).saveName(newName))
+			if (((SymitarFile) item.getData()).saveName(newName)) {
 				item.setText(newName); // Set name in tree
 
-			// Now, set name in any open tabs
-			for (CTabItem c : mainfolder.getItems())
-				if (c.getData("file") == item.getData()) // Be sure it's the
-					// exact same
-					// instance, like it
-					// should be
-				{
-					c.setText(newName);
-					if (c.getControl() instanceof EditorComposite) {
-						c.setData("modified", false);
-						((EditorComposite) c.getControl()).updateModified();
+				// Now, set name in any open tabs
+				for (CTabItem c : mainfolder.getItems()) {
+					if (c.getData("file") == item.getData()) // Be sure it's the
+						// exact same
+						// instance, like it
+						// should be
+					{
+						c.setText(newName);
+						if (c.getControl() instanceof EditorComposite) {
+							c.setData("modified", false);
+							((EditorComposite) c.getControl()).updateModified();
+						}
 					}
 				}
+				return true;
+			} else {
+				return false;
+			}
 		}
 
 		if (item.getData() instanceof Project) {
 			((Project) item.getData()).setName(newName);
 			item.setText(newName);
+			return true;
+		}
+		return false;
+	}
+
+	protected void renameSymDesc(final TreeItem item) {
+		int sym = (int)item.getData();
+		String strSYMDesc = (RepDevMain.SESSION_INFO.get(sym).getDescription() == null ? "" : RepDevMain.SESSION_INFO.get(sym).getDescription());
+		strSYMDesc = InputShell.getInput(shell, "SYM Description", "Enter a SYM Description", strSYMDesc, false);
+		System.out.println("sym: " + sym);
+		if(strSYMDesc != null) {
+			strSYMDesc = (strSYMDesc.length() > 25 ? strSYMDesc.trim().substring(0,25) : strSYMDesc.trim());
+			RepDevMain.SESSION_INFO.get(sym).setDescription(strSYMDesc);
+			if (strSYMDesc != "") strSYMDesc = " - " + strSYMDesc;
+			item.setText("Sym " + sym + strSYMDesc);
 		}
 	}
 
@@ -2149,15 +2255,25 @@ public class MainShell {
 		if (!(tree.getSelection()[1].getData() instanceof SymitarFile))
 			return;
 
-		Color bgcolor = new Color(Display.getCurrent(),200,200,200);
+		compareFiles((SymitarFile)tree.getSelection()[0].getData(), (SymitarFile)tree.getSelection()[1].getData());
+	}
 
-
+	protected void compareFiles(SymitarFile f1, SymitarFile f2) {
+		Color bgcolor;
+		
+		try {
+			Style style = new Style(new File("styles\\" + Config.getStyle() + ".xml"));
+			bgcolor = new Color(Display.getCurrent(), style.getColor("editor", "line"));
+		} catch (Exception e) {
+			bgcolor = new Color(Display.getCurrent(), 220, 220, 220);
+		}
 		//This code gets the correct color to highlight the lines of the compare shell.
 		//The only drawback is that it is a bit on the slow side (usually takes about 1 second).
 		//In my opinion it is fine to take this bit of time, because the compare shell looks
 		//hideous with a custom style without this code. Hopefully we can find a faster way to do
 		//this, but for the time being it should work.
-		EditorComposite temp = (EditorComposite)openFile((SymitarFile)tree.getSelection()[1].getData());
+		
+		/*EditorComposite temp = (EditorComposite)openFile(f1);
 		for (CTabItem tab : mainfolder.getItems()){
 			if (tab.getControl() != null && tab.getControl() instanceof EditorComposite){
 				bgcolor =((EditorComposite)mainfolder.getSelection().getControl()).getLineColor();
@@ -2166,6 +2282,8 @@ public class MainShell {
 				tab.dispose();
 			}
 		}
+		*/
+		
 		//TODO:Rewrite the above section so that it runs faster, or determines the color in another way
 
 
@@ -2177,7 +2295,7 @@ public class MainShell {
 		// item.setData("file", file);
 		// item.setData("loc", loc);
 
-		item.setControl(new CompareComposite(mainfolder, item, (SymitarFile) tree.getSelection()[0].getData(), (SymitarFile) tree.getSelection()[1].getData(), bgcolor));
+		item.setControl(new CompareComposite(mainfolder, item, f1, f2, bgcolor));
 
 		item.addDisposeListener(new DisposeListener(){
 
@@ -2188,6 +2306,9 @@ public class MainShell {
 
 		});
 		setMainFolderSelection(item);
+		f1.compareMode(false);
+		f2.compareMode(false);
+		setMainTitle();
 	}
 
 	private void removeDir(TreeItem currentItem) {
@@ -2361,10 +2482,10 @@ public class MainShell {
 
 		if (sym < 100) {
 			gc.setFont(new Font(Display.getCurrent(), "Courier New", 8, SWT.BOLD));
-			gc.drawString(String.valueOf(sym), 16 - 7 * String.valueOf(sym).length(), 5, true);
+			gc.drawString(String.valueOf(sym), 16 - 7 * String.valueOf(sym).length(), 0, true);
 		} else {
 			gc.setFont(new Font(Display.getCurrent(), "Courier New", 7, SWT.BOLD));
-			gc.drawString(String.valueOf(sym), 0, 5, true);
+			gc.drawString(String.valueOf(sym), 0, 0, true);
 		}
 		gc.dispose();
 
@@ -2802,8 +2923,6 @@ public class MainShell {
 				if (event.doit) {
 					if( mainfolder.getSelection() == event.item )
 						shell.setText(RepDevMain.NAMESTR); // remove active repgen name from title
-					if(Config.getHostNameInTitle())
-						shell.setText(shell.getText() + " - " + Config.getServer());
 					clearErrorAndTaskList((CTabItem) event.item);
 				}
 
@@ -3000,8 +3119,10 @@ public class MainShell {
 				currNavLine = line;
 				currHistoryStep = navHistory.size();
 			}
-		if(navHistory.size() > NAVIGATE_HISTORY_LIMIT)
+		if(navHistory.size() > NAVIGATE_HISTORY_LIMIT){
 			navHistory.remove(0); // Keep limit to NAVIGATE_HISTORY_LIMIT
+			currHistoryStep = navHistory.size();
+		}
 	}
 	private boolean SuspendNavRecording = false;
 	private int currHistoryStep = 0;
@@ -3507,7 +3628,7 @@ public class MainShell {
 
 		});
 
-		MenuItem toolsOptions = new MenuItem(toolsMenu, SWT.PUSH);
+		final MenuItem toolsOptions = new MenuItem(toolsMenu, SWT.PUSH);
 		toolsOptions.setText("&Options");
 		toolsOptions.setImage(RepDevMain.smallOptionsImage);
 		toolsOptions.addSelectionListener(new SelectionAdapter() {
@@ -3516,11 +3637,19 @@ public class MainShell {
 			}
 		});
 
-		MenuItem toolsProject = new MenuItem(toolsMenu, SWT.PUSH);
+		final MenuItem toolsProject = new MenuItem(toolsMenu, SWT.PUSH);
 		toolsProject.setText("&Project File");
 		toolsProject.addSelectionListener(new SelectionAdapter() {
 			public void widgetSelected(SelectionEvent e) {
 				ProjectBackupShell.open();
+			}
+		});
+
+		final MenuItem toolsChgPass = new MenuItem(toolsMenu, SWT.PUSH);
+		toolsChgPass.setText("&Update AIX Passwords");
+		toolsChgPass.addSelectionListener(new SelectionAdapter() {
+			public void widgetSelected(SelectionEvent e) {
+				RepDev_SSO.changeServerPasswords(shell);
 			}
 		});
 
@@ -3529,6 +3658,22 @@ public class MainShell {
 		helpAbout.addSelectionListener(new SelectionAdapter() {
 			public void widgetSelected(SelectionEvent arg0) {
 				showAboutBox();
+			}
+		});
+		
+		toolsMenu.addMenuListener(new MenuListener() {
+			public void menuHidden(MenuEvent e) {
+			}
+
+			public void menuShown(MenuEvent e) {
+				toolsProject.setEnabled(true);
+				toolsOptions.setEnabled(true);
+				
+				if (RepDevMain.MASTER_PASSWORD_HASH == null) {
+					toolsChgPass.setEnabled(false);
+				} else {
+					toolsChgPass.setEnabled(true);
+				}
 			}
 		});
 
@@ -3555,6 +3700,7 @@ public class MainShell {
 			}
 		});
 
+		/*
 		MenuItem helpDocsItem = new MenuItem(docsMenu, SWT.PUSH);
 		helpDocsItem.setText("&RepDev Docs");
 		helpDocsItem.addSelectionListener(new SelectionAdapter() {
@@ -3568,7 +3714,7 @@ public class MainShell {
 				}				
 			}			
 		});
-
+		*/
 		new MenuItem(docsMenu, SWT.SEPARATOR);
 
 		// Populate Docs Menu:
@@ -3676,6 +3822,12 @@ public class MainShell {
 		}
 	}
 
+	public void reopenCurrentTab() {
+		SymitarFile File = (SymitarFile) mainfolder.getSelection().getData("file");
+		closeCurrentTab();
+		openFile(File);
+	}
+	
 	public void closeCurrentTab() {
 //		System.out.println(mainfolder.getSelection());
 //		if(mainfolder.getSelection() != null)
@@ -3866,12 +4018,24 @@ public class MainShell {
 	}
 
 	private void setMainTitle(){
+		String server = "";
+		int sym;
+		
+		if(Config.getHostNameInTitle()) {
+			if (mainfolder.getSelection() != null && mainfolder.getSelection().getControl() instanceof EditorComposite && (mainfolder.getSelection() != null && ((EditorComposite) mainfolder.getSelection().getControl()).getFile() instanceof SymitarFile)) {
+				SymitarFile file =  ((EditorComposite) mainfolder.getSelection().getControl()).getFile();
+				if(!file.isLocal()) {
+					sym =file.getSym();
+					server = " - " + RepDevMain.SESSION_INFO.get(sym).getServer();
+				}
+			}
+		}
+		
 		if (Config.getFileNameInTitle())
-			shell.setText(mainfolder.getSelection().getText() + " - " +RepDevMain.NAMESTR);
+			shell.setText(mainfolder.getSelection().getText() + " - " +RepDevMain.NAMESTR + server);
 		else
-			shell.setText(RepDevMain.NAMESTR);
-		if(Config.getHostNameInTitle())
-			shell.setText(shell.getText() + " - " + Config.getServer());
+			shell.setText(RepDevMain.NAMESTR + server);
+		
 	}
 
 //	public ArrayList<EditorComposite> getEditorCompositeList() {

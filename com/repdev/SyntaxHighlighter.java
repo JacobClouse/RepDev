@@ -70,7 +70,7 @@ public class SyntaxHighlighter implements ExtendedModifyListener, LineStyleListe
 	STRUCT2_INVALID = new EStyle(new RGB(255, 128, 255), new RGB(128, 0, 0), SWT.NONE),
 	TASK = new EStyle(new RGB(64,64,64), null, SWT.BOLD);
 
-	private static Color FORECOLOR = new Color(Display.getCurrent(), FOREGROUND), BACKCOLOR = new Color(Display.getCurrent(), BACKGROUND);
+	private static Color FORECOLOR = new Color(Display.getCurrent(), FOREGROUND), BACKCOLOR = new Color(Display.getCurrent(), BACKGROUND), BULLETS = new Color(Display.getCurrent(),new RGB(105,105,105));
 	private static Font FONT;
 
 	private RepgenParser parser;
@@ -105,6 +105,8 @@ public class SyntaxHighlighter implements ExtendedModifyListener, LineStyleListe
 
 		txt.setForeground(FORECOLOR);
 		txt.setBackground(BACKCOLOR);
+		if(parser.getSym()==Config.getLiveSym() && !this.file.isLocal())
+			txt.setBackground(new Color(Display.getCurrent(), getRGB(Config.getLiveSymColor())));
 		txt.addExtendedModifyListener(this);
 		txt.addLineStyleListener(this);
 		
@@ -154,6 +156,10 @@ public class SyntaxHighlighter implements ExtendedModifyListener, LineStyleListe
 		return tokenColor;
 	}
 
+	public Color getBulletColor(){
+		return BULLETS;
+	}
+
 	public static void loadStyle(String styleName){
 		System.out.println("Loading theme " + styleName + ".xml");
 		try{
@@ -178,6 +184,11 @@ public class SyntaxHighlighter implements ExtendedModifyListener, LineStyleListe
 			STRUCT1_INVALID = new EStyle(style.getColor("struct1Inv", "fgColor"), style.getColor("struct1Inv", "bgColor"), style.getStyle("struct1Inv")); 
 			STRUCT2_INVALID = new EStyle(style.getColor("struct2Inv", "fgColor"), style.getColor("struct2Inv", "bgColor"), style.getStyle("struct2Inv"));
 			TASK = new EStyle(style.getColor("task", "fgColor"), style.getColor("task", "bgColor"), style.getStyle("task"));
+			try{
+				BULLETS = new Color(Display.getCurrent(),style.getColor("linenumber","fgColor"));
+			}catch(Exception e){
+				BULLETS = new Color(Display.getCurrent(),new RGB(127, 127, 127));
+			}
 		}catch(Exception e){
 			//System.out.println(e.getMessage());
 			System.out.println("Invalid theme using default");
@@ -203,6 +214,7 @@ public class SyntaxHighlighter implements ExtendedModifyListener, LineStyleListe
 
 			customColor = new Color(Display.getCurrent(), new RGB(232,242,254));
 			tokenColor = new Color(Display.getCurrent(), new RGB(192,192,192));
+			BULLETS = new Color(Display.getCurrent(),new RGB(127, 127, 127));
 		}
 	}
 
@@ -244,13 +256,15 @@ public class SyntaxHighlighter implements ExtendedModifyListener, LineStyleListe
 			range = TYPE_CHAR.getRange(tok.getStart(), tok.length());
 		else if (tok.inDate())
 			range = TYPE_DATE.getRange(tok.getStart(), tok.length());
+		// Validates the token is a Record before the colon
 		else if (tok.getAfter() != null && tok.getAfter().getStr().equals(":")) {
 			if (tok.dbRecordValid())
 				range = STRUCT1.getRange(tok.getStart(), tok.length());
 			else
 				range = STRUCT1_INVALID.getRange(tok.getStart(), tok.length());
+		// Validates the token is a Field or a Field without the Sub Field if the next token is :(
 		} else if (tok.getBefore() != null && tok.getBefore().getStr().equals(":")) {
-			if (tok.dbFieldValid(RepgenParser.getDb().getTreeRecords()))
+			if (tok.dbFieldValid(RepgenParser.getDb().getTreeRecords()) || (tok.dbFieldValidNoSubFld(RepgenParser.getDb().getTreeRecords())))
 				range = STRUCT2.getRange(tok.getStart(), tok.length());
 			else
 				range = STRUCT2_INVALID.getRange(tok.getStart(), tok.length());
@@ -334,4 +348,13 @@ public class SyntaxHighlighter implements ExtendedModifyListener, LineStyleListe
 		}
 	}
 
+	private RGB getRGB(String rgbHex) {
+		int[] rgb = {0,0,0};
+
+		rgb[0] = Integer.parseInt(rgbHex.substring(0,2), 16);
+		rgb[1] = Integer.parseInt(rgbHex.substring(2,4), 16);
+		rgb[2] = Integer.parseInt(rgbHex.substring(4), 16);
+
+		return new RGB(rgb[0],rgb[1],rgb[2]);
+	}
 }

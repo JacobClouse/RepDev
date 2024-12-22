@@ -21,8 +21,11 @@ package com.repdev;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 
 import org.eclipse.swt.graphics.Point;
+import org.eclipse.swt.graphics.RGB;
 /**
  * Configuration class is serialized at the start/end of the program to store things like syms open, server, and other global config things
  * @author Jake Poznanski
@@ -33,23 +36,29 @@ public class Config implements Serializable {
 	private static final long serialVersionUID = 1L;
 	
 	private ArrayList<Integer> syms = new ArrayList<Integer>();
+	private HashMap<Integer, SessionInfo> sessionInfo = new HashMap<Integer, SessionInfo>();
 	private String server = "127.0.0.1";
 	private int port = 23;
 	private int tabSize = 0; // 0 = Regular tab
 	private String lastUsername = "", lastPassword = "", lastUserID;
+	private String passwordValidator = "";
 	private boolean runOptionsAskForPrompts = true;
 	private int runOptionsQueue = -1;
 	private int rotkeyp=0, rotkeyu=0;
 	
 	private String style = "default";
 	
+	private int liveSym = 1999;
+	private String liveSymColor = "FFD7E4";
+	private boolean useSourceControl = false;
+	private String sourceControlDir = "";
 	/**
 	 * REVISION is a constant.  This constant should be incrmented everytime there is a new
 	 * feature added.  RepDevMain will compare REVISION with getRevision() and if they are
 	 * different, then a popup will notify the user and will launch the OptionsShell so that
 	 * the users can config the new options.
 	 */
-	public final static int REVISION = 3; // Modify this everytime we add new options to prompt the user.
+	public final static int REVISION = 6; // Modify this everytime we add new options to prompt the user.
 	private int revision=-1;
 	private boolean windowMaximized;
 	private Point windowSize;
@@ -62,6 +71,7 @@ public class Config implements Serializable {
 	private String noErrorCheckPrefix = "INC.";
 	private boolean fileNameInWinTitle = true;
 	private boolean hostInTitle = true;
+	private boolean viewLineNumbers = true;
 	
 	@SuppressWarnings("unused")
 	private int maxQueues = 3; //The largest value this slider goes up to, We should probably scrap this since the max value is 9999 and the error checking code is good enough now that it can detect what needs to be entered. In real life, this can also be non continous large ranges, which complicates things.
@@ -80,10 +90,34 @@ public class Config implements Serializable {
 		return me.syms;
 	}
 
+	public static void setSessionInfo(HashMap<Integer, SessionInfo> newSessionInfo) {
+		me.sessionInfo = newSessionInfo;
+	}
+	
+	public static HashMap<Integer, SessionInfo> getSessionInfo(){
+		return me.sessionInfo;
+	}
+	
 	public static Config getConfig() {
 		return me;
 	}
 
+	public static String getPasswordValidator() {
+		return me.passwordValidator == null ? "" : me.passwordValidator;
+	}
+	
+	public static void setPasswordValidator(String passwordValidator) {
+		me.passwordValidator = passwordValidator;
+	}
+	
+	public static boolean useSSO() {
+		if (getPasswordValidator().equals("")) {
+			return false;
+		} else {
+			return true;
+		}
+	}
+ 
 	public static String getLastPassword() {
 		String Pass="";
 		String last = me.lastPassword;
@@ -117,7 +151,7 @@ public class Config implements Serializable {
 
 	public static void setConfig(Config config) {
 		me = config;
-		
+		Collections.sort(me.syms);
 		/**
 		 * Note, this is where we should set any init stuff to un-null any objects
 		 */
@@ -225,6 +259,38 @@ public class Config implements Serializable {
 	    me.style = s;
 	}
 	
+	public static void setLiveSym(int s) {
+		me.liveSym = s;
+	}
+
+	public static int getLiveSym() {
+		return me.liveSym;
+	}
+
+	public static void setLiveSymColor(String c) {
+		me.liveSymColor = c;
+	}
+
+	public static String getLiveSymColor() {
+		return me.liveSymColor;
+	}
+	
+	public static boolean getUseSourceControl() {
+		return me.useSourceControl;
+	}
+	
+	public static void setUseSourceControl(boolean b) {
+		me.useSourceControl = b;
+	}
+	
+	public static String getSourceControlDir() {
+		return me.sourceControlDir;
+	}
+	
+	public static void setSourceControlDir(String dir) {
+		me.sourceControlDir = dir;
+	}
+
 	/**
 	 * Returns true if the main shell window was maximized, and false
 	 * if it was not maximized, when RepDev terminated
@@ -458,5 +524,13 @@ public class Config implements Serializable {
 
 	public static boolean getHostNameInTitle(){
 		return me.hostInTitle;
+	}
+
+	public static void setViewLineNumbers(boolean lineNumbers){
+		me.viewLineNumbers = lineNumbers;
+	}
+
+	public static boolean getViewLineNumbers(){
+		return me.viewLineNumbers;
 	}
 }

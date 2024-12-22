@@ -28,7 +28,6 @@ import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.ScrolledComposite;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
-import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.layout.FillLayout;
 import org.eclipse.swt.layout.FormAttachment;
@@ -57,7 +56,7 @@ public class AboutBoxShell {
 		  +"support@repdev.org\n"
 		  +"\nSWT Version: " + SWT.getVersion() + "\n\n"
 		  +"RepDev is a community based free IDE for use writing\n"
-		  +"RepGens for Symitar systems.  It is ment to be an\n"
+		  +"RepGens for Symitar systems.  It is meant to be an\n"
 		  +"alternative to using Episys's built in RepGen tools.\n"
 		  +"\n\n"
 		  +"Most icons are from the Silk icon set\n"
@@ -149,16 +148,19 @@ public class AboutBoxShell {
 		license.addSelectionListener(new SelectionAdapter() {
 			public void widgetSelected(SelectionEvent e) {
 				String gplTxt = "",line;
+				
 				try {
-					BufferedReader gpl = new BufferedReader(new FileReader("GPL.txt"));
-					while( (line = gpl.readLine()) != null ) {
-						gplTxt += line.trim() + "\n";
+					try (BufferedReader gpl = new BufferedReader(new FileReader("GPL.txt"))) {
+						while( (line = gpl.readLine()) != null ) {
+							gplTxt += line.trim() + "\n";
+						}
 					}
 				} catch (FileNotFoundException e1) {
 					gplTxt = "File not found: GPL.txt";
 				} catch (IOException e2) {
 					System.err.println("IOException in AboutBoxShell2");
 				}
+				
 				mainText.setText(gplTxt);
 				inner.pack();
 			}

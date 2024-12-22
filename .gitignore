@@ -1,4 +1,6 @@
 *.class
+helpmenu.conf
+repdev.conf
 
 
 #ignore thumbnails created by windows
@@ -29,3 +31,4 @@ obj/
 [Rr]elease*/
 _ReSharper*/
 [Tt]est[Rr]esult*
+/dist/

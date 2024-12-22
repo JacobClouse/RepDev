@@ -351,6 +351,10 @@ public abstract class SymitarSession {
 		return server;
 	}
 
+	public void setServer(String server) {
+		this.server = server;
+	}
+
 	public int getPort() {
 		return port;
 	}
@@ -371,7 +375,7 @@ public abstract class SymitarSession {
 		}
 		
 		if(!leadingZero){
-			while (userNum.charAt(0) == '0') {
+			while (userNum.charAt(0) == '0' && userNum.length() > 1) {
 				// System.out.println("userNum- " + userNum);
 				userNum=userNum.substring(1,userNum.length());
 			}

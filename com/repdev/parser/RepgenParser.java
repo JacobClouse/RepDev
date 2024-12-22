@@ -74,7 +74,7 @@ public class RepgenParser {
 	boolean refreshIncludes = false; //The parser will keep track of changes as the file is edited, and if an include reparse is needed, this flag will be set. 
 	//Since include parsing is resource intensive, it's up to the rest of the code to decide when to parse these if needed. (Usually on file save)
 	private boolean noParse = false;
-	public static final String[] taskTokens = { "todo", "fixme", "bug", "bugbug", "wtf" };
+	public static final String[] taskTokens = { "todo", "fixme", "bug", "bugbug", "wtf", "bm", "bookmark", "test", "note" };
 
 
 	public RepgenParser(StyledText txt, SymitarFile file) {
@@ -401,21 +401,30 @@ public class RepgenParser {
 										type = Task.Type.BUG;
 									} else if( tok.getStr().equals("wtf") ) {
 										type = Task.Type.WTF;
-									}
+									} else if( tok.getStr().equals("bm") || tok.getStr().equals("bookmark") ) {
+										type = Task.Type.BM;
+									} else if( tok.getStr().equals("test") ) {
+										type = Task.Type.TEST;
+									} else if( tok.getStr().equals("note") ) {
+										type = Task.Type.NOTE;
+ 									}
+
 	
 	
 									/* Don't die if the item does not have a line following it...
 									 * Taken from my #include "" double click code.
 									 */
 									int startOffset = tok.getStart();
-									int endOffset = txt.getOffsetAtLine(Math.min(txt.getLineCount() - 1, line + 1));
+									int pos1 = txt.getText().toString().indexOf("\n",startOffset + tok.getStr().length()) + 1;
+									int pos2 = txt.getText().toString().indexOf("]",startOffset + tok.getStr().length()) - 1;
+									int endOffset = (pos1<pos2 ? pos1 : pos2);
 	
 	
 									if( endOffset - 1 <= startOffset)
 										desc = "";
 									else
 										desc = txt.getText(startOffset, endOffset);
-									desc = desc.trim().substring(0, desc.trim().length()-1);
+									desc = desc.trim();
 	
 									Task task = new Task(file.getName(), desc, line, col, type);
 									taskList.add( task );
@@ -457,7 +466,13 @@ public class RepgenParser {
 										row.setImage(RepDevMain.smallTaskBug);
 									} else if( task.getType() == Task.Type.WTF ) {
 										row.setImage(RepDevMain.smallTaskWtf);
-									}
+									} else if( task.getType() == Task.Type.BM ) {
+										row.setImage(RepDevMain.smallTaskBookmark);
+									} else if( task.getType() == Task.Type.TEST ) {
+										row.setImage(RepDevMain.smallTaskTest);
+									} else if( task.getType() == Task.Type.NOTE ) {
+										row.setImage(RepDevMain.smallTaskNote);
+ 									}
 
 								}
 							}
@@ -632,6 +647,15 @@ public class RepgenParser {
 
 					curspot++;
 					inDate = !inDate;
+				} else if(cur == ':'){
+					if(chars[i+1] == '(') {
+						addToken(tokens,curspot,new Token(":(",cstart,commentDepth,commentDepth,inString,inString,inDefine, inDate,inDate));
+						i++;
+						cstart++;
+					} else {
+						addToken(tokens,curspot,new Token(":",cstart,commentDepth,commentDepth,inString,inString,inDefine, inDate,inDate));
+					}
+					curspot++;
 				} else if(scur.trim().length()!=0){
 					addToken(tokens,curspot,new Token(scur,cstart,commentDepth,commentDepth,inString,inString,inDefine,
 							inDate,inDate));
@@ -768,16 +792,28 @@ public class RepgenParser {
 
 						continue;
 					}
-					if( cur.getAfter().getAfter() != null && db.containsFieldName(cur.getStr() + ":" + cur.getAfter().getAfter().getStr()) && str.substring(cur.getEnd(), cur.getAfter().getAfter().getStart()).equals(":"))	
+					if( cur.getAfter().getAfter() != null)	
 					{
-						cur.setStr(cur.getStr() + ":" + cur.getAfter().getAfter().getStr() );
-						tokens.remove(cur.getAfter());
-						tokens.remove(cur.getAfter().getAfter());
-						cur.setNearTokens(tokens, tokens.indexOf(cur));
-						if( cur.getAfter() != null )
-							cur.getAfter().setNearTokens(tokens, tokens.indexOf(cur.getAfter()));
+						if ( db.containsFieldName(cur.getStr() + ":" + cur.getAfter().getAfter().getStr()) && str.substring(cur.getEnd(), cur.getAfter().getAfter().getStart()).equals(":") ) {
+							cur.setStr(cur.getStr() + ":" + cur.getAfter().getAfter().getStr() );
+							tokens.remove(cur.getAfter());
+							tokens.remove(cur.getAfter().getAfter());
+							cur.setNearTokens(tokens, tokens.indexOf(cur));
+							if( cur.getAfter() != null )
+								cur.getAfter().setNearTokens(tokens, tokens.indexOf(cur.getAfter()));
 
-						continue;
+							continue;
+						} else if ( cur.getAfter().getAfter().getAfter() != null && db.containsFieldName(cur.getStr() + ":1") && cur.getAfter().getStr().equals(":(") && cur.getAfter().getAfter().getAfter().getStr().equals(")") ) {
+							cur.setStr(cur.getStr() + ":(" + cur.getAfter().getAfter().getStr()+")" );
+							tokens.remove(cur.getAfter());
+							tokens.remove(cur.getAfter().getAfter());
+							tokens.remove(cur.getAfter().getAfter().getAfter());
+							cur.setNearTokens(tokens, tokens.indexOf(cur));
+							if( cur.getAfter() != null )
+								cur.getAfter().setNearTokens(tokens, tokens.indexOf(cur.getAfter()));
+
+							continue;
+						}
 					}
 
 					i++;

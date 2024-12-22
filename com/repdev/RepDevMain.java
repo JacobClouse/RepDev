@@ -19,12 +19,15 @@
 
 package com.repdev;
 
+import java.io.Console;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.OutputStreamWriter;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
@@ -48,11 +51,12 @@ import org.eclipse.swt.widgets.MessageBox;
  */
 public class RepDevMain {
 	public static final HashMap<Integer, SymitarSession> SYMITAR_SESSIONS = new HashMap<Integer, SymitarSession>();
-
+	public static HashMap<Integer, SessionInfo> SESSION_INFO = new HashMap<Integer, SessionInfo>();
+	public static byte [] MASTER_PASSWORD_HASH;
 	public static final boolean DEVELOPER = false; //Set this flag to enable saving passwords, this makes it easy for developers to log in and check stuff quickly after making changes
 	public static final int VMAJOR = 1;
-	public static final int VMINOR = 6;
-	public static final int VFIX   = 10;
+	public static final int VMINOR = 7;
+	public static final int VFIX   = 5;
 	public static final String VSPECIAL = ""; // "special" string for release names, beta, etc
 
 	public static final String VERSION = VMAJOR + "." + VMINOR + (VFIX>0?"."+VFIX:"") + (DEVELOPER ? "-dev" : "") + (!VSPECIAL.equals("")? " " + VSPECIAL : "");
@@ -61,11 +65,11 @@ public class RepDevMain {
 
 	public static MainShell mainShell;
 	private static Display display;
-	public static Image smallAddImage, smallErrorsImage, smallFileImage, smallProjectImage, smallRemoveImage, smallRepGenImage, smallSymImage, smallTasksImage, smallActionSaveImage, smallFileAddImage, smallFileRemoveImage,
+	public static Image smallAddImage, smallErrorsImage, smallFileImage, smallProjectImage, smallRemoveImage, smallRepGenImage, smallSymImage, smallSymOnImage, smallTasksImage, smallActionSaveImage, smallFileAddImage, smallFileRemoveImage,
 	smallProjectAddImage, smallProjectRemoveImage, smallRunImage, smallSymAddImage, smallSymRemoveImage, smallDBFieldImage, smallDBRecordImage, smallVariableImage, smallImportImage, smallFileNewImage, smallFileOpenImage, smallDeleteImage,
 	smallOptionsImage, smallIndentLessImage, smallIndentMoreImage, smallCutImage, smallCopyImage, smallPasteImage, smallSelectAllImage, smallRedoImage, smallUndoImage, smallFindImage, smallFindReplaceImage, smallExitImage, smallRunFMImage,
 	smallWarningImage, smallReportsImage, smallPrintImage, smallFolderImage, smallFolderAddImage, smallFolderRemoveImage, smallActionSaveAsImage, smallProgramIcon, smallInstallImage, smallCompareImage, smallSurroundImage, smallSurroundPrint,
-	smallTaskTodo, smallTaskFixme, smallTaskBug, smallTaskWtf, smallHighlight, smallHighlightGrey, smallFormatCodeImage, smallInsertSnippetImage, smallFunctionImage, smallSnippetImage, smallKeywordImage, smallDefineVarImage,
+	smallTaskTodo, smallTaskFixme, smallTaskBug, smallTaskWtf, smallTaskTest, smallTaskBookmark, smallTaskNote, smallHighlight, smallHighlightGrey, smallFormatCodeImage, smallInsertSnippetImage, smallFunctionImage, smallSnippetImage, smallKeywordImage, smallDefineVarImage,
 	smallRepGenDemandImage;
 	public static final String IMAGE_DIR = "repdev-icons/";
 
@@ -84,11 +88,18 @@ public class RepDevMain {
 				+"This is free software, and you are welcome to redistribute it \n"
 				+"under certain conditions.\n");
 
+		System.out.println("Java Runtime version " + System.getProperty("java.runtime.version"));
+		System.out.println("---------------------------------------------------------");
+		System.out.println("Charset.defaultCharset()                  = " + Charset.defaultCharset());
+		System.out.println("System.getProperty(\"file.encoding\")       = " + System.getProperty("file.encoding"));
+
 		try{
 			loadSettings();
 			createImages();
 			createGUI();
 
+			if (!Config.getPasswordValidator().contentEquals("") && RepDevMain.MASTER_PASSWORD_HASH == null) RepDev_SSO.login(mainShell.shell);
+			
 			while (!mainShell.isDisposed()) {
 				if (!display.readAndDispatch())
 					display.sleep();
@@ -141,6 +152,7 @@ public class RepDevMain {
 		smallRepGenDemandImage = new Image(display, IMAGE_DIR + "small-repgen-demand.png");
 		smallRunImage = new Image(display, IMAGE_DIR + "small-run.png");
 		smallSymImage = new Image(display, IMAGE_DIR + "small-sym.png");
+		smallSymOnImage = new Image(display, IMAGE_DIR + "small-sym-on.png");
 		smallTasksImage = new Image(display, IMAGE_DIR + "small-tasks.png");
 		smallSymAddImage = new Image(display, IMAGE_DIR + "small-sym-add.png");
 		smallSymRemoveImage = new Image(display, IMAGE_DIR + "small-sym-remove.png");
@@ -185,6 +197,9 @@ public class RepDevMain {
 		smallTaskFixme = new Image(display, IMAGE_DIR + "small-task-fixme.png");
 		smallTaskBug = new Image(display, IMAGE_DIR + "small-task-bug.png");
 		smallTaskWtf = new Image(display, IMAGE_DIR + "small-task-wtf.png");
+		smallTaskTest = new Image(display, IMAGE_DIR + "small-task-test.png");
+		smallTaskBookmark = new Image(display, IMAGE_DIR + "small-task-bookmark.png");
+		smallTaskNote = new Image(display, IMAGE_DIR + "small-task-note.png");
 
 		smallFormatCodeImage = new Image(display, IMAGE_DIR + "small-format-code.png");
 		smallInsertSnippetImage = new Image(display, IMAGE_DIR + "small-insert-snippet.png");
@@ -235,6 +250,12 @@ public class RepDevMain {
 		} catch (ClassNotFoundException e) {
 			e.printStackTrace();
 		}
+		
+		SESSION_INFO = Config.getSessionInfo();
+		if(SESSION_INFO == null) {
+			SESSION_INFO = new HashMap<Integer, SessionInfo>();
+		}
+		
 		SymitarSession session;
 
 		// Start up data
@@ -245,6 +266,12 @@ public class RepDevMain {
 			else
 				session = new DirectSymitarSession();
 
+			if (SESSION_INFO.get(sym) == null) {
+				SessionInfo si = new SessionInfo("", "", "", "", "");
+				SESSION_INFO.put(sym, si);
+			} else {
+				session.setServer(SESSION_INFO.get(sym).getServer());
+			}
 			SYMITAR_SESSIONS.put(sym, session);
 		}
 		if(Config.getTerminateHour()==0){
@@ -270,12 +297,15 @@ public class RepDevMain {
 		try {
 			// Write the current syms to the Config file
 			ArrayList<Integer> newSyms = new ArrayList<Integer>();
+			HashMap<Integer, SessionInfo> newSessionInfo = new HashMap<Integer, SessionInfo>();
 
 			for (int sym : SYMITAR_SESSIONS.keySet()) {
 				newSyms.add(sym);
+				newSessionInfo.put(sym, SESSION_INFO.get(sym));
 			}
 
 			Config.setSyms(newSyms);
+			Config.setSessionInfo(newSessionInfo);
 
 
 			//Only save passwords if DEVELOPER FLAG is on

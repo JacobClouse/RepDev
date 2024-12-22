@@ -25,73 +25,95 @@ import org.eclipse.swt.widgets.Shell;
 
 public enum SessionError {
 	NONE, SERVER_NOT_FOUND, AIX_LOGIN_WRONG, SYM_INVALID, USERID_INVALID, USERID_PASSWORD_CHANGE, ALREADY_CONNECTED, NOT_CONNECTED, IO_ERROR, CONSOLE_BLOCKED,
-	INVALID_FILE_TYPE, INVALID_QUEUE, INPUT_ERROR, FILENAME_TOO_LONG, ARGUMENT_ERROR, NULL_POINTER, PLINK_NOT_FOUND, NOT_WINDOWSLEVEL_3;
+	INVALID_FILE_TYPE, INVALID_QUEUE, INPUT_ERROR, IP_NOT_ALLOWED, FILENAME_TOO_LONG, ARGUMENT_ERROR, NULL_POINTER, PLINK_NOT_FOUND, NOT_WINDOWSLEVEL_3,
+	INCOMPATIBLE_REVISION, UNDEFINED_ERROR, AIX_PASSWORD_TO_EXPIRE, SSH_KEY_CHANGED;
 	
 	public void showError(){
 		MessageBox dialog = new MessageBox(new Shell(),SWT.OK | SWT.ICON_ERROR);
 		dialog.setText("Error in host connection");
 		dialog.setMessage("Error connecting to server, check network connections");
+		dialog.setMessage(getErrorString());
+		dialog.open();
+	}
+
+	public String getErrorString(){
+		String msg = "";
 		
 		switch(this){
-			case AIX_LOGIN_WRONG:
-				dialog.setMessage("AIX Login information is incorrect!");
-				break;
-			case ALREADY_CONNECTED:
-				dialog.setMessage("Symitar Session is already connected.");
-				break;
-			case ARGUMENT_ERROR:
-				dialog.setMessage("Invalid File Argument!");
-				break;
-			case CONSOLE_BLOCKED:
-				dialog.setMessage("This console has been blocked!");
-				break;
-			case FILENAME_TOO_LONG:
-				dialog.setMessage("Filename is too long!");
-				break;
-			case INPUT_ERROR:
-				dialog.setMessage("Input Error was detected.");
-				break;
-			case INVALID_FILE_TYPE:
-				dialog.setMessage("Invalid File Type.");
-				break;
-			case INVALID_QUEUE:
-				dialog.setMessage("Invalid Queue.");
-				break;
-			case IO_ERROR:
-				dialog.setMessage("I/O Error.");
-				break;
-			case NONE:
-				dialog.setMessage("No Session Error");
-				break;
-			case NOT_CONNECTED:
-				dialog.setMessage("Symitar Session is not connected!");
-				break;
-			case NOT_WINDOWSLEVEL_3:
-				dialog.setMessage("WINDOWSLEVEL not set to 3.");
-				break;
-			case NULL_POINTER:
-				dialog.setMessage("Null Pointer.");
-				break;
-			case PLINK_NOT_FOUND:
-				dialog.setMessage("Plink.exe was not found in the startup directory.");
-				break;
-			case SERVER_NOT_FOUND:
-				dialog.setMessage("Server not found, please check network connections");
-				break;
-			case SYM_INVALID:
-				dialog.setMessage("Specified SYM is invalid.");
-				break;
-			case USERID_INVALID:
-				dialog.setMessage("Invalid User ID/Password");
-				break;
-			case USERID_PASSWORD_CHANGE:
-				dialog.setMessage("User Password change required.");
-				break;
-			default:
-				dialog.setMessage("Undefined Session Error!");
-				break;
+		case AIX_LOGIN_WRONG:
+			msg = "AIX Login information is incorrect!";
+			break;
+		case AIX_PASSWORD_TO_EXPIRE:
+			msg = "AIX password due to expire.";
+			break;
+		case ALREADY_CONNECTED:
+			msg = "Symitar Session is already connected.";
+			break;
+		case ARGUMENT_ERROR:
+			msg = "Invalid File Argument!";
+			break;
+		case CONSOLE_BLOCKED:
+			msg = "This console has been blocked!";
+			break;
+		case FILENAME_TOO_LONG:
+			msg = "Filename is too long!";
+			break;
+		case INPUT_ERROR:
+			msg = "Input Error was detected.";
+			break;
+		case INVALID_FILE_TYPE:
+			msg = "Invalid File Type.";
+			break;
+		case INVALID_QUEUE:
+			msg = "Invalid Queue.";
+			break;
+		case IO_ERROR:
+			msg = "I/O Error.";
+			break;
+		case IP_NOT_ALLOWED:
+			msg = "Logins not allowed from host.";
+			break;
+		case NONE:
+			msg = "No Session Error";
+			break;
+		case NOT_CONNECTED:
+			msg = "Symitar Session is not connected!";
+			break;
+		case NOT_WINDOWSLEVEL_3:
+			msg = "WINDOWSLEVEL not set to 3.";
+			break;
+		case NULL_POINTER:
+			msg = "Null Pointer.";
+			break;
+		case PLINK_NOT_FOUND:
+			msg = "Plink.exe was not found in the startup directory.";
+			break;
+		case SERVER_NOT_FOUND:
+			msg = "Server not found, please check network connections";
+			break;
+		case SYM_INVALID:
+			msg = "Specified SYM is invalid.";
+			break;
+		case USERID_INVALID:
+			msg = "Invalid User ID/Password";
+			break;
+		case USERID_PASSWORD_CHANGE:
+			msg = "User Password change required.";
+			break;
+		case INCOMPATIBLE_REVISION:
+			msg = "Incompatible Revison";
+			break;
+		case SSH_KEY_CHANGED:
+			msg = "The SSH Key on the host has changed.  Please ensure this is a valid change, then delete the key from the Registry and try again;\n\nHKEY_CURRENT_USER\\Software\\SimonTatham\\PuTTY\\SshHostKeys\\rsa2@22:YOURHOSTNAME";
+			break;
+		case UNDEFINED_ERROR:
+			msg = "Undefined Error";
+			break;
+		default:
+			msg = "Undefined Session Error!";
+			break;
 		}
 		
-		dialog.open();
+		return msg;
 	}
 }; 
